@@ -1,0 +1,5 @@
+/lis3dh.egg-info/
+/dist/
+build/
+/__pycache__/
+/lis3dh/__pycache__/
