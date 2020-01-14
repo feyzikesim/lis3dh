@@ -234,8 +234,27 @@ class LIS3DH():
     def __init__(self, port, scale, data_rate):
         self.bus = SMBus(port)
         self.dev = device()
+        self.sensor_init(scale, data_rate)
+
+    def sensor_init(self, scale, data_rate):
+        while self.read_dummy_register() == self.ERROR:
+            print("DUMMY REGISTER READING ERROR!")
+            sleep(0.5)
         self.set_scale(scale)
         self.set_data_rate(data_rate)
+
+        data = self.read_register(self.dev.CTRL_REG4.ADDR)
+        data |= 0x80
+        self.write_register(self.dev.CTRL_REG4.ADDR, data)
+
+        data = self.read_register(self.dev.CTRL_REG1.ADDR)
+        data &= 0xF7
+        self.write_register(self.dev.CTRL_REG1.ADDR, data)
+
+        data = self.read_register(self.dev.CTRL_REG2.ADDR)
+        data &= 0xA8
+        data |= 0x57
+        self.write_register(self.dev.CTRL_REG2.ADDR, data)
 
     def read_dummy_register(self):
         dummy = self.bus.read_byte_data(self.dev.LIS3DH_ADDR, self.dev.WHO_AM_I.ADDR)
@@ -286,10 +305,7 @@ class LIS3DH():
     def read_data_ready_register(self):
         data = self.bus.read_byte_data(self.dev.LIS3DH_ADDR, self.dev.STATUS_REG.ADDR)
 
-        control = data >> 3
-        control &= 0x01
-
-        if data & 0x01:
+        if data & (1<<7):
             return self.NO_ERROR
         else:
             return self.ERROR
@@ -304,9 +320,9 @@ class LIS3DH():
         elif scale == self.dev.CTRL_REG4.SCALE_4G:
             factor = 0.122
         elif scale == self.dev.CTRL_REG4.SCALE_8G:
-            factor = 0.183
+            factor = 0.244
         elif scale == self.dev.CTRL_REG4.SCALE_16G:
-            factor = 0.732
+            factor = 0.488
 
         x_low = self.bus.read_byte_data(self.dev.LIS3DH_ADDR, self.dev.OUT_VALUE.OUT_X_L)
         x_high = self.bus.read_byte_data(self.dev.LIS3DH_ADDR, self.dev.OUT_VALUE.OUT_X_H)
@@ -315,9 +331,20 @@ class LIS3DH():
         z_low = self.bus.read_byte_data(self.dev.LIS3DH_ADDR, self.dev.OUT_VALUE.OUT_Z_L)
         z_high = self.bus.read_byte_data(self.dev.LIS3DH_ADDR, self.dev.OUT_VALUE.OUT_Z_H)
 
-        x = (((x_high << 8) | x_low) - 32768.0) * factor / 1000
-        y = (((y_high << 8) | y_low) - 32768.0) * factor / 1000
-        z = (((z_high << 8) | z_low) - 32768.0) * factor / 1000
+        x = x_high * 256 + x_low
+        y = y_high * 256 + y_low
+        z = z_high * 256 + z_low
+
+        if x > 32767:
+            x -= pow(2, 16)
+        if y > 32767:
+            y -= pow(2, 16)
+        if z > 32767:
+            z -= pow(2, 16)
+
+        x = x * factor
+        y = y * factor
+        z = z * factor
 
         data_list.append(x)
         data_list.append(y)
